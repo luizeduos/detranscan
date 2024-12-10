@@ -4,10 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leitor de Código de Barras em Tempo Real</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"
-        integrity="sha512-bCsBoYoW6zE0aja5xcIyoCDPfT27+cGr7AOCqelttLVRGay6EKGQbR6wm6SUcUGOMGXJpj+jrIpMS6i80+kZPw=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <title>Leitor de Código de Barras</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js" crossorigin="anonymous"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -15,12 +13,18 @@
             margin: 20px;
         }
 
-        #scanner {
+        #videoContainer {
+            position: relative;
             width: 100%;
-            max-width: 640px;
             height: 360px;
-            margin: 20px auto;
-            border: 1px solid #ccc;
+            margin-top: 20px;
+            border: 2px solid #ddd;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
         #result {
@@ -30,73 +34,104 @@
         }
 
         button {
+            margin-top: 10px;
             padding: 10px 20px;
             font-size: 16px;
             cursor: pointer;
-            margin-top: 10px;
+        }
+
+        .scanner-border {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 2px solid #00ff00;
+            width: 80%;
+            height: 50px;
         }
     </style>
 </head>
 
 <body>
-    <h1>Leitor de Código de Barras em Tempo Real</h1>
-    <div id="scanner"></div>
-    <div id="result">Aguardando leitura...</div>
-    <button id="stopScanner">Parar Scanner</button>
+    <h1>Leitor de Código de Barras</h1>
+    <div id="videoContainer">
+        <video id="video" autoplay></video>
+        <div class="scanner-border"></div>
+    </div>
+    <button id="startButton">Iniciar Leitura</button>
+    <div id="result"></div>
 
     <script>
-        const scanner = document.getElementById('scanner');
+        const startButton = document.getElementById('startButton');
         const result = document.getElementById('result');
-        const stopScannerButton = document.getElementById('stopScanner');
+        const videoElement = document.getElementById('video');
 
-        // Inicia o scanner com configurações
-        function startScanner() {
+        // Configurações da câmera
+        const constraints = {
+            video: {
+                facingMode: "environment", // Pode usar "user" para frontal
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        };
+
+        // Inicia a captura de vídeo da câmera
+        async function startScanner() {
+            try {
+                // Acessa a câmera e inicia o fluxo
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                videoElement.srcObject = stream;
+            } catch (error) {
+                console.error("Erro ao acessar a câmera: ", error);
+                result.textContent = "Erro ao acessar a câmera.";
+                result.style.color = 'red';
+            }
+        }
+
+        // Configura o clique do botão para iniciar a leitura
+        startButton.addEventListener('click', () => {
+            startButton.style.display = 'none'; // Esconde o botão
+            startScanner();
+            startBarcodeReader();
+        });
+
+        // Função para ler o código de barras com Quagga
+        function startBarcodeReader() {
             Quagga.init({
                 inputStream: {
                     name: "Live",
                     type: "LiveStream",
-                    target: scanner, // Elemento onde o vídeo será renderizado
-                    constraints: {
-                        width: 640,
-                        height: 360,
-                        facingMode: "environment" // Usa a câmera traseira
-                    }
+                    target: videoElement,
+                    constraints: constraints.video,
+                    area: { // Ajusta para a área do scanner
+                        top: "0%",
+                        right: "0%",
+                        bottom: "0%",
+                        left: "0%"
+                    },
                 },
                 decoder: {
-                    readers: [
-                        "code_128_reader",
-                        "ean_reader",
-                        "ean_8_reader",
-                        "upc_reader"
-                    ]
-                },
-                locate: true // Melhora a detecção de códigos de barras em ângulos variados
-            }, (err) => {
+                    readers: ['code_128_reader', 'ean_reader', 'ean_8_reader', 'upc_reader']
+                }
+            }, function (err) {
                 if (err) {
-                    console.error("Erro ao iniciar o QuaggaJS:", err);
-                    result.textContent = "Erro ao iniciar o scanner.";
+                    console.error("Erro ao inicializar Quagga: ", err);
                     return;
                 }
-                console.log("QuaggaJS iniciado.");
-                Quagga.start();
-            });
 
-            // Detecta códigos de barras e exibe o resultado
-            Quagga.onDetected((data) => {
-                const code = data.codeResult.code;
-                result.textContent = `Código detectado: ${code}`;
-                console.log("Código detectado:", code);
+                // Inicia a leitura
+                Quagga.start();
+
+                // Evento de sucesso na leitura do código de barras
+                Quagga.onDetected(function (result) {
+                    const code = result.codeResult.code;
+                    result.textContent = `Código de Barras: ${code}`;
+                    result.style.color = 'green';
+                    Quagga.stop(); // Para a leitura
+                    startButton.style.display = 'block'; // Exibe o botão novamente
+                });
             });
         }
-
-        // Parar o scanner
-        stopScannerButton.addEventListener('click', () => {
-            Quagga.stop();
-            result.textContent = "Scanner parado.";
-        });
-
-        // Inicia o scanner ao carregar a página
-        window.addEventListener('load', startScanner);
     </script>
 </body>
 
